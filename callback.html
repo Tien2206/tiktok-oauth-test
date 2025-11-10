@@ -1,32 +1,69 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TikTok OAuth Callback</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9fafb;
+      text-align: center;
+      padding-top: 80px;
+      color: #333;
+    }
+    .container {
+      background: #fff;
+      border-radius: 12px;
+      padding: 40px;
+      max-width: 500px;
+      margin: 0 auto;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #ee1d52;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 5px 8px;
+      border-radius: 6px;
+      display: inline-block;
+      margin-top: 10px;
+      word-break: break-all;
+    }
+    .btn {
+      margin-top: 25px;
+      display: inline-block;
+      background: #ee1d52;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: bold;
+      transition: 0.3s;
+    }
+    .btn:hover {
+      background: #d21a46;
+    }
+  </style>
 </head>
 <body>
-  <h2>Đang xử lý đăng nhập TikTok...</h2>
+  <div class="container">
+    <h1>Đăng nhập TikTok thành công 🎉</h1>
+    <p>Mã code bạn nhận được là:</p>
+    <code id="code">Đang lấy mã...</code>
+    <p><a href="/" class="btn">Quay lại trang chủ</a></p>
+  </div>
 
   <script>
-    // Lấy thông tin code & state TikTok trả về
+    // Lấy "code" từ URL query string
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-    const error = params.get('error');
+    const code = params.get("code");
 
-    if (error) {
-      document.body.innerHTML = `<h3>Lỗi: ${error}</h3>`;
-    } else if (code) {
-      document.body.innerHTML = `
-        <h3>Đăng nhập thành công!</h3>
-        <p><b>Code:</b> ${code}</p>
-        <p><b>State:</b> ${state}</p>
-      `;
-      console.log("TikTok code:", code);
-      // Bạn có thể gửi code này về server để lấy access token
-      // fetch('/exchange_token', { method: 'POST', body: JSON.stringify({ code }) })
+    if (code) {
+      document.getElementById("code").textContent = code;
     } else {
-      document.body.innerHTML = `<h3>Không nhận được mã code.</h3>`;
+      document.getElementById("code").textContent = "Không nhận được mã code 😢";
     }
   </script>
 </body>
