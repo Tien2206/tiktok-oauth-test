@@ -4,12 +4,42 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ứng dụng test TikTok OAuth</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fafafa;
+      text-align: center;
+      padding-top: 80px;
+      color: #333;
+    }
+    h1 {
+      color: #ee1d52;
+    }
+    button {
+      background: #ee1d52;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover {
+      background: #d21a46;
+    }
+  </style>
 </head>
 <body>
   <h1>Ứng dụng test TikTok OAuth</h1>
-  <p>Trang chính của app test.</p>
+  <p>Trang chính của app test TikTok Login.</p>
 
-  <a href="https://www.tiktok.com/auth/authorize/?client_key=sbawun019fzz8xxvcd&scope=user.info.basic&response_type=code&redirect_uri=https://tien2206.github.io/tiktok-oauth-test/&state=your_test_state">
+  <a href="https://www.tiktok.com/v2/auth/authorize/
+?client_key=sbawun019fzz8xxvcd
+&scope=user.info.basic%2Cvideo.list%2Cvideo.comment
+&response_type=code
+&redirect_uri=https%3A%2F%2Ftien2206.github.io%2Ftiktok-oauth-test%2Fcallback.html
+&state=test_state">
     <button>Đăng nhập bằng TikTok</button>
   </a>
 </body>
