@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>TikTok OAuth Callback</title>
+</head>
+<body>
+  <h2>Đang xử lý đăng nhập TikTok...</h2>
+
+  <script>
+    // Lấy thông tin code & state TikTok trả về
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    const error = params.get('error');
+
+    if (error) {
+      document.body.innerHTML = `<h3>Lỗi: ${error}</h3>`;
+    } else if (code) {
+      document.body.innerHTML = `
+        <h3>Đăng nhập thành công!</h3>
+        <p><b>Code:</b> ${code}</p>
+        <p><b>State:</b> ${state}</p>
+      `;
+      console.log("TikTok code:", code);
+      // Bạn có thể gửi code này về server để lấy access token
+      // fetch('/exchange_token', { method: 'POST', body: JSON.stringify({ code }) })
+    } else {
+      document.body.innerHTML = `<h3>Không nhận được mã code.</h3>`;
+    }
+  </script>
+</body>
+</html>
