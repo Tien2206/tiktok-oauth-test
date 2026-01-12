@@ -2,13 +2,29 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Mini Mario — Full (Login + 10 Maps + Day/Night + FX + Sounds)</title>
   <style>
-    html, body { margin:0; height:100%; background:#0b0f14; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    .wrap { height:100%; display:flex; align-items:center; justify-content:center; padding:18px; }
-    .game-shell { position:relative; width:min(1100px, 100%); }
-    canvas { width:100%; height:auto; display:block; image-rendering: pixelated; border-radius:16px; box-shadow:0 14px 40px rgba(0,0,0,.55); background:#111; }
+    html, body {
+      margin:0;
+      height:100%;
+      background:#0b0f14;
+      font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      overscroll-behavior:none;
+      touch-action:none;
+    }
+    .wrap { height:100%; display:flex; align-items:center; justify-content:center; padding:8px; }
+    .game-shell { position:relative; width:min(1100px, 100%); max-height:100vh; }
+    canvas {
+      width:100%;
+      height:auto;
+      display:block;
+      image-rendering: pixelated;
+      border-radius:16px;
+      box-shadow:0 14px 40px rgba(0,0,0,.55);
+      background:#111;
+      touch-action:none;
+    }
 
     .overlay{
       position:absolute; inset:0;
@@ -50,6 +66,7 @@
       border:1px solid rgba(255,255,255,.15);
       background:#0f172a;
       color:#fff; outline:none;
+      font-size:14px;
     }
     input::placeholder{ color:#93a4b8; }
 
@@ -68,6 +85,7 @@
       display:inline-block; padding:2px 7px; border-radius:8px;
       border:1px solid rgba(255,255,255,.18);
       background:rgba(0,0,0,.25); margin:0 2px;
+      font-size:11px;
     }
 
     .topbar{
@@ -106,6 +124,50 @@
       border-radius:12px;
       font-weight:900;
       cursor:pointer;
+      font-size:12px;
+    }
+
+    /* ==== MOBILE TOUCH CONTROLS ==== */
+    .mobile-controls{
+      position:absolute;
+      left:0; right:0;
+      bottom:10px;
+      display:flex;
+      justify-content:space-between;
+      padding:0 14px;
+      pointer-events:none; /* chỉ cho nút bên trong nhận sự kiện */
+    }
+    .ctrl-group{
+      display:flex;
+      gap:10px;
+      pointer-events:auto;
+    }
+    .touch-btn{
+      min-width:64px;
+      min-height:64px;
+      border-radius:20px;
+      border:1px solid rgba(255,255,255,.18);
+      background:rgba(15,23,42,.82);
+      color:#e5e7eb;
+      font-size:20px;
+      font-weight:900;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      box-shadow:0 8px 20px rgba(0,0,0,.55);
+      touch-action:none;
+      user-select:none;
+    }
+    .touch-btn.small{
+      min-width:52px;
+      min-height:52px;
+      font-size:16px;
+    }
+    .touch-btn:active{
+      transform:scale(.94) translateY(2px);
+    }
+    @media (min-width:980px){
+      /* trên PC nếu thích có thể ẩn, nhưng vẫn để JS quyết định hiển thị */
     }
   </style>
 </head>
@@ -253,22 +315,31 @@
       </div>
     </div>
 
+    <!-- MOBILE TOUCH CONTROLS -->
+    <div class="mobile-controls" id="mobileControls" style="display:none;">
+      <div class="ctrl-group">
+        <button class="touch-btn" data-key="ArrowLeft">◀</button>
+        <button class="touch-btn" data-key="ArrowRight">▶</button>
+      </div>
+      <div class="ctrl-group">
+        <button class="touch-btn" data-key="Space">⭡</button>
+        <button class="touch-btn small" data-key="KeyR">↻</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <script>
 /* =========================================================
-   MINI MARIO — FULL SINGLE FILE (FIXED)
-   ✅ FIX 1: Map 2 nhảy dễ hơn (cột thấp hơn + ít chặn đường)
-   ✅ FIX 2: Rơi xuống nước -> mất 1 mạng -> quay lại "điểm an toàn" trước đó
-   ✅ FIX 3: Hộp ? làm mới đúng khi chết/reset/chơi lại màn (level được rebuild mới)
-   ✅ FIX 4: Âm thanh thời tiết (mưa / lá / tuyết) bằng WebAudio (noise ambience)
+   MINI MARIO — FULL SINGLE FILE (MOBILE TOUCH READY)
+   - Thêm điều khiển cảm ứng cho điện thoại (trái / phải / nhảy / reset)
+   - Giữ nguyên login / đăng ký / xếp hạng / map / thời tiết / âm thanh
    ========================================================= */
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const W = canvas.width, H = canvas.height;
-
 const TILE = 40;
 
 // ===== UI =====
@@ -293,7 +364,7 @@ const backToGameBtn   = document.getElementById("backToGameBtn");
 const resumeBtn       = document.getElementById("resumeBtn");
 const restartLevelBtn = document.getElementById("restartLevelBtn");
 const logoutBtn       = document.getElementById("logoutBtn");
-const listUser         = document.getElementById("listUser");
+const listUser        = document.getElementById("listUser");
 
 const skinSelect    = document.getElementById("skinSelect");
 const saveSkinBtn   = document.getElementById("saveSkinBtn");
@@ -318,6 +389,8 @@ const leaderListIngame = document.getElementById("leaderListIngame");
 
 const clearRankBtn = document.getElementById("clearRankBtn");
 const clearRankBtn2 = document.getElementById("clearRankBtn2");
+
+const mobileControls = document.getElementById("mobileControls");
 
 // ===== INPUT =====
 const keys = new Set();
@@ -447,18 +520,13 @@ function startNoiseAmbience(type){
   const buffer = audioCtx.createBuffer(1, len, sr);
   const data = buffer.getChannelData(0);
 
-  // generate noise
   for(let i=0;i<len;i++){
     let v = (Math.random()*2 - 1);
-    // shape per weather
     if(type==="rain"){
-      // brighter noise
       v = v * 0.9;
     }else if(type==="leaves"){
-      // softer noise
       v = v * 0.55;
     }else if(type==="snow"){
-      // wind-ish low
       v = v * 0.65;
     }else{
       v = v * 0.0;
@@ -470,7 +538,6 @@ function startNoiseAmbience(type){
   src.buffer = buffer;
   src.loop = true;
 
-  // filter to shape
   const filter = audioCtx.createBiquadFilter();
   if(type==="rain"){
     filter.type = "highpass";
@@ -488,7 +555,6 @@ function startNoiseAmbience(type){
   }
 
   const g = audioCtx.createGain();
-  // keep very low volume
   g.gain.value = (type==="rain") ? 0.035 : (type==="leaves" ? 0.022 : (type==="snow" ? 0.028 : 0.0));
 
   src.connect(filter);
@@ -500,8 +566,7 @@ function startNoiseAmbience(type){
 }
 function syncAmbienceToLevel(){
   const wt = weatherForLevel(levelIndex);
-  // only change if different
-  if(!audioCtx) return; // only after user interaction
+  if(!audioCtx) return;
   if(ambience.type !== wt){
     if(wt==="clear") stopAmbience();
     else startNoiseAmbience(wt);
@@ -570,7 +635,6 @@ function makePlayer(){
     stepSwap:false,
     runDustTick:0,
 
-    // FIX: last safe point (before falling into water)
     safeX: 80,
     safeY: 0,
     safeCamX: 0
@@ -582,9 +646,7 @@ function makeEnemy(x,y){
 function makeCoin(x,y){ return { x,y, w:18,h:18, taken:false, bob:Math.random()*Math.PI*2 }; }
 function makeQBox(x,y){ return { x,y, w:TILE,h:TILE, used:false, bump:0 }; }
 function makeFlag(x,y){ return { x,y, w:26,h:160 }; }
-
 function makeSlowBox(x,y){ return { x,y, w:TILE, h:TILE, active:true }; }
-
 function makeTurret(x,y){
   return { x,y, w:30, h:34, cd: 300 };
 }
@@ -728,7 +790,6 @@ function decorateGrid(baseLines, levelNo){
   const rows = baseLines.length;
   const rng = rngFromSeed(12345 + levelNo*999);
 
-  // --- PROFILE ĐỘ KHÓ THEO MAP ---
   let diff = 1;
   if(levelNo <= 2) diff = 1;
   else if(levelNo <= 4) diff = 2;
@@ -741,25 +802,19 @@ function decorateGrid(baseLines, levelNo){
   const EXTRA_PLATS    = (diff - 1) * 2;
   const EXTRA_PILLARS  = (diff - 1) * 2;
 
-  // ground bottom 2 rows
   baseLines[rows-1] = "#".repeat(cols);
   baseLines[rows-2] = "#".repeat(cols);
 
-  // spawn & goal
   setCell(baseLines, rows-3, 4, "S");
   setCell(baseLines, 5, cols-4, "F");
 
-  // ==== FIX MAP 2: giảm độ "kẹt nhảy" ====
-  // Map 1-2: cột thấp hơn và ít cột sát nhau
   const pillarCount = (levelNo<=2 ? 4 : 5) + Math.floor(rng()*3) + EXTRA_PILLARS;
   for(let i=0;i<pillarCount;i++){
     const c = 12 + Math.floor(rng()*(cols-24));
-    // Map 1-2: chỉ cao 2 ô; Map khác: 2..3 ô
     const h = (levelNo<=2) ? 2 : (2 + Math.floor(rng()*2));
     fillRect(baseLines, rows-2-h, c, h, 1, "#");
   }
 
-  // platforms (đưa cao hơn một chút để không chạm đầu)
   const platCount = 8 + EXTRA_PLATS;
   for(let i=0;i<platCount;i++){
     const c = 12 + Math.floor(rng()*(cols-24));
@@ -768,21 +823,18 @@ function decorateGrid(baseLines, levelNo){
     fillRect(baseLines, r, c, 1, w, "#");
   }
 
-  // coins
   for(let i=0;i<26;i++){
     const c = 8 + Math.floor(rng()*(cols-16));
     const r = 4 + Math.floor(rng()*(rows-8));
     if(baseLines[r][c]===".") setCell(baseLines, r, c, "o");
   }
 
-  // q boxes
   for(let i=0;i<10;i++){
     const c = 12 + Math.floor(rng()*(cols-24));
     const r = 6 + Math.floor(rng()*4);
     if(baseLines[r][c]===".") setCell(baseLines, r, c, "?");
   }
 
-  // water pits: 2..3 tiles => 1 jump pass
   const pitCount = 2 + EXTRA_PITS;
   for(let i=0;i<pitCount;i++){
     const pitW = 2 + Math.floor(rng()*2);
@@ -797,14 +849,12 @@ function decorateGrid(baseLines, levelNo){
     }
   }
 
-  // slow boxes
   for(let i=0;i<4 + EXTRA_SLOWBOX;i++){
     const c = 10 + Math.floor(rng()*(cols-20));
     const r = rows-3;
     if(baseLines[r][c]===".") setCell(baseLines, r, c, "b");
   }
 
-  // enemies
   const eCount = 5 + Math.floor(rng()*3) + EXTRA_ENEMIES;
   for(let i=0;i<eCount;i++){
     const c = 12 + Math.floor(rng()*(cols-24));
@@ -812,7 +862,6 @@ function decorateGrid(baseLines, levelNo){
     if(baseLines[r][c]===".") setCell(baseLines, r, c, "e");
   }
 
-  // turrets
   const turretCount = 1 + Math.floor(rng()*2) + EXTRA_TURRETS;
   for(let i=0;i<turretCount;i++){
     const c = 18 + Math.floor(rng()*(cols-36));
@@ -820,7 +869,6 @@ function decorateGrid(baseLines, levelNo){
     if(baseLines[r][c]===".") setCell(baseLines, r, c, "t");
   }
 
-  // birds decorative
   const birdStep = (levelNo <= 2) ? 10 : (levelNo <= 4 ? 7 : 6);
   for(let c=12; c<cols-10; c+=birdStep){
     if(rng() < 0.55){
@@ -829,9 +877,7 @@ function decorateGrid(baseLines, levelNo){
     }
   }
 
-  // ==== FIX an toàn: dọn đường đầu map 2 để tránh "kẹt" ====
   if(levelNo===2){
-    // clear một đoạn từ c=6..18 ở hàng gần đất để nhảy mượt
     for(let c=6;c<=18;c++){
       setCell(baseLines, rows-3, c, ".");
       setCell(baseLines, rows-4, c, ".");
@@ -881,7 +927,6 @@ function buildLevelFromGrid(lines){
 
   if(!flag) flag = makeFlag(width-140, 80);
 
-  // build water segments from missing ground in bottom row
   const waterRow = rows-1;
   let c=0;
   while(c<cols){
@@ -909,7 +954,6 @@ function cloneLevel(idx){
   return buildLevelFromGrid(decorated);
 }
 
-// ===== INIT MAPS SEED (không dùng trực tiếp object nữa) =====
 const MAP_COUNT = 10;
 
 let level = cloneLevel(levelIndex);
@@ -1005,7 +1049,6 @@ function moveAndCollide(ent){
   const prevVy = ent.vy;
   ent.onGround = false;
 
-  // X
   ent.x += ent.vx;
   for(const s of allSolids()){
     if(aabb(ent,s)){
@@ -1017,7 +1060,6 @@ function moveAndCollide(ent){
     }
   }
 
-  // Y
   ent.y += ent.vy;
   for(const s of allSolids()){
     if(aabb(ent,s)){
@@ -1033,12 +1075,10 @@ function moveAndCollide(ent){
     }
   }
 
-  // landing grass
   if(!prevOnGround && ent.onGround && prevVy > 6.5){
     spawnGrass(ent.x + ent.w/2, ent.y + ent.h, Math.round(prevVy*1.2));
   }
 
-  // slow box touch
   for(const s of allSolids()){
     if(s._slow && s._slow.active && aabb(ent,s)){
       ent.slowFrames = Math.max(ent.slowFrames, 60*2);
@@ -1075,7 +1115,6 @@ function updateEnemy(e){
     }
   }
 
-  // edge turn
   if(grounded){
     const aheadX = e.vx>0 ? e.x+e.w+2 : e.x-2;
     const footY  = e.y+e.h+2;
@@ -1179,23 +1218,20 @@ function tickWeather(){
   }
 }
 
-// ===== FIX: Check water falling (lose life + back to safe point) =====
+// ===== FIX: Check water falling =====
 function playerInWater(){
   for(const w of level.waters){
-    // water area is bottom tile row; check overlap with player lower body
     const waterBox = { x:w.x, y:w.y, w:w.w, h:w.h };
     if(aabb(player, waterBox)) return true;
   }
   return false;
 }
 function updateSafePoint(){
-  // only update safe point when on ground and NOT on water region
   if(!player.onGround) return;
-  // check if player is standing over water: probe under feet
   const probe = { x: player.x + 4, y: player.y + player.h + 2, w: player.w - 8, h: 2 };
   for(const w of level.waters){
     const waterTop = { x:w.x, y:w.y, w:w.w, h:2 };
-    if(aabb(probe, waterTop)) return; // don't set safe on water
+    if(aabb(probe, waterTop)) return;
   }
   player.safeX = player.x;
   player.safeY = player.y;
@@ -1256,7 +1292,6 @@ function updatePlayer(){
   player.vy += GRAV;
   player.vy = clamp(player.vy, -22, MAX_FALL);
 
-  // run FX
   player.runTick++;
   if(player.onGround && Math.abs(player.vx) > 1.35){
     player.runDustTick++;
@@ -1276,16 +1311,13 @@ function updatePlayer(){
   moveAndCollide(player);
   if(player.onGround) player.wasJumping=false;
 
-  // update safe point AFTER collision settle
   updateSafePoint();
 
-  // timers
   if(player.invincibleFrames>0) player.invincibleFrames--;
   if(player.jump2Frames>0) player.jump2Frames--;
   if(player.immuneFrames>0) player.immuneFrames--;
   if(player.slowFrames>0) player.slowFrames--;
 
-  // coins pickup
   for(const c of level.coins){
     if(!c.taken && aabb(player,c)){
       c.taken=true;
@@ -1304,7 +1336,6 @@ function updatePlayer(){
     }
   }
 
-  // enemies collision
   for(const e of level.enemies){
     if(!e.alive) continue;
     if(aabb(player,e)){
@@ -1323,19 +1354,16 @@ function updatePlayer(){
     }
   }
 
-  // ===== FIX: rơi xuống nước =====
   if(playerInWater()){
     loseLife("Rơi xuống nước!");
     return;
   }
 
-  // fall out
   if(player.y > level.height + 220){
     loseLife("Rơi khỏi map!");
     return;
   }
 
-  // GOAL
   if(aabb(player, level.goal)){
     triggerLevelClear();
     return;
@@ -1408,19 +1436,16 @@ function loseLife(reason){
   if(lives<=0){
     endGame(false);
   }else{
-    // respawn at SAFE point + 3s immunity
     player.immuneFrames = 60*3;
     player.vx = 0; player.vy = 0;
     player.x = player.safeX;
     player.y = player.safeY;
     cameraX = player.safeCamX;
-    // slight pop
     player.y -= 8;
   }
 }
 
 function resetLevelToCurrent(keepScore=true, keepLives=true){
-  // ✅ FIX: rebuild level mới => hộp ? reset đúng
   level = cloneLevel(levelIndex);
 
   player = makePlayer();
@@ -1444,7 +1469,6 @@ function resetLevelToCurrent(keepScore=true, keepLives=true){
   if(!keepScore) score=0;
   if(!keepLives) lives=START_LIVES;
 
-  // ✅ sync ambience when level reset
   syncAmbienceToLevel();
 }
 
@@ -1500,7 +1524,6 @@ function endGame(won){
     sfxDeath();
   }
 
-  // stop ambience on end
   stopAmbience();
 }
 
@@ -2012,7 +2035,6 @@ saveSkinBtn.addEventListener("click", ()=>{
 backToStartBtn.addEventListener("click", ()=> showStart());
 playAgainBtn.addEventListener("click", ()=> startGameFresh());
 
-// rank clear
 clearRankBtn.addEventListener("click", ()=>{
   localStorage.removeItem(RANK_KEY);
   renderRank(leaderList);
@@ -2049,7 +2071,6 @@ function afterAuth(user){
   const map = getSkinMap();
   skinName = map[userName] || "red";
   startGameFresh();
-  // ambience only after user interaction
   syncAmbienceToLevel();
 }
 
@@ -2076,11 +2097,52 @@ registerBtn.addEventListener("click", ()=>{
   if(res.ok) afterAuth(u);
 });
 
+// ===== MOBILE TOUCH BINDING =====
+function setVirtualKey(code, down){
+  if(down) keys.add(code);
+  else keys.delete(code);
+}
+
+function bindTouchButton(btn){
+  const code = btn.dataset.key;
+  if(!code) return;
+
+  const start = e => {
+    e.preventDefault();
+    ensureAudio();
+    setVirtualKey(code, true);
+  };
+  const end = e => {
+    e.preventDefault();
+    setVirtualKey(code, false);
+  };
+
+  btn.addEventListener("touchstart", start, { passive:false });
+  btn.addEventListener("touchend", end, { passive:false });
+  btn.addEventListener("touchcancel", end, { passive:false });
+
+  btn.addEventListener("mousedown", start);
+  btn.addEventListener("mouseup", end);
+  btn.addEventListener("mouseleave", end);
+}
+
+function initMobileControls(){
+  const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
+  if(hasTouch){
+    mobileControls.style.display = "flex";
+  }else{
+    mobileControls.style.display = "none";
+  }
+  document.querySelectorAll(".touch-btn").forEach(bindTouchButton);
+}
+
 // ===== INIT =====
 function init(){
   renderRank(leaderList);
   renderRank(leaderList2);
   renderRank(leaderListIngame);
+
+  initMobileControls();
 
   const s = getSession();
   if(s && s.user){
@@ -2100,7 +2162,7 @@ init();
 
 // ===== ensure ambience changes when pass map or reset =====
 (function hookAmbienceUpdates(){
-  // override nextLevel to sync ambience already handled in resetLevelToCurrent
+  // ambience đã được sync trong resetLevelToCurrent + nextLevel
 })();
 </script>
 </body>
