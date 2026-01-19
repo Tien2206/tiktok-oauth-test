@@ -270,6 +270,22 @@
                      placeholder="Mật khẩu" />
             </div>
 
+            <!-- NEW: mã phòng chơi chung -->
+            <div class="field" style="margin-top:8px;">
+              <input id="roomInput" type="text" maxlength="8"
+                     placeholder="Mã phòng chơi chung (vd: ROLA1, tối đa 4 máy, có thể bỏ trống)" />
+            </div>
+
+            <!-- NEW: link chia sẻ cho máy khác -->
+            <div class="field" style="margin-top:6px;">
+              <input id="shareInput" type="text" readonly
+                     onclick="this.select()"
+                     placeholder="Link chia sẻ cho máy khác (tự sinh khi nhập mã phòng)" />
+            </div>
+            <div class="muted" style="font-size:11px;margin-top:4px;">
+              ➜ Bước: nhập mã phòng → copy link này → gửi cho máy khác mở link + nhập cùng mã phòng.
+            </div>
+
             <div class="controls">
               <button class="btn" id="loginBtn">Đăng nhập</button>
               <button class="btn secondary" id="registerBtn">Đăng ký</button>
@@ -374,6 +390,7 @@
 /* =========================================================
    MINI MARIO — FULL SINGLE FILE (MOBILE + PC + MIT-FRIENDLY)
    + NÂNG CẤP LƯU TÀI KHOẢN + XẾP HẠNG THEO ĐIỂM CAO NHẤT
+   + PHÒNG CHƠI CHUNG (TỐI ĐA 4 MÁY) + LINK CHIA SẺ
    ========================================================= */
 
 const canvas = document.getElementById("game");
@@ -404,6 +421,8 @@ const registerBtn  = document.getElementById("registerBtn");
 const userInput    = document.getElementById("userInput");
 const passInput    = document.getElementById("passInput");
 const authMsg      = document.getElementById("authMsg");
+const roomInput    = document.getElementById("roomInput");   // NEW
+const shareInput   = document.getElementById("shareInput");  // NEW
 
 const howBtn       = document.getElementById("howBtn");
 const howText      = document.getElementById("howText");
@@ -482,6 +501,158 @@ const SESSION_KEY = "mm_session_v1";  // phiên đăng nhập hiện tại
 const RANK_KEY = "mm_rank_v1";        // lịch sử run cũ (giữ cho khỏi lỗi, nhưng không dùng hiển thị)
 const SKIN_KEY = "mm_skin_v1";
 
+// ===== SHARE LINK (LINK ĐỂ GỬI CHO MÁY KHÁC) ===== // NEW
+function getQueryParam(name){
+  const params = new URLSearchParams(window.location.search || "");
+  return params.get(name);
+}
+
+function updateShareLink(){
+  if(!shareInput) return;
+  let base = window.location.href.split("#")[0].split("?")[0];
+  const code = (roomInput?.value || "").trim().toUpperCase();
+  let link = base;
+  if(code){
+    link += "?room=" + encodeURIComponent(code);
+  }
+  shareInput.value = link;
+}
+
+// ===== MULTIPLAYER (PHÒNG CHƠI CHUNG TỐI ĐA 4 MÁY) =====
+// ⚠ Bạn phải dựng server WebSocket thực sự ở địa chỉ WS_URL.
+// Nếu chưa có server, hãy để trống "Mã phòng" để chơi offline bình thường.
+const WS_URL = "wss://YOUR_MINI_MARIO_SERVER_HERE"; // TODO: sửa thành server của bạn
+
+let ws = null;
+let wsConnected = false;
+let roomCode = "";
+let clientId = "c_" + Math.random().toString(36).slice(2, 8);
+let peers = {};
+
+function setupRoom(code){
+  roomCode = (code || "").trim().toUpperCase();
+}
+
+function connectWS(){
+  if(!roomCode) return; // không có mã phòng => không connect
+
+  if(ws){
+    try{ ws.close(); }catch(e){}
+    ws = null;
+  }
+
+  try{
+    ws = new WebSocket(WS_URL);
+  }catch(e){
+    console.warn("Không tạo được WebSocket:", e);
+    return;
+  }
+
+  wsConnected = false;
+
+  ws.onopen = () => {
+    wsConnected = true;
+    const msg = {
+      type: "join",
+      room: roomCode,
+      id: clientId,
+      name: userName,
+      skin: skinName
+    };
+    try{ ws.send(JSON.stringify(msg)); }catch(e){}
+  };
+
+  ws.onmessage = (ev) => {
+    let data;
+    try{ data = JSON.parse(ev.data); }catch(e){ return; }
+    if(!data || data.room !== roomCode) return;
+
+    const peerCount = Object.keys(peers).length;
+
+    if(data.type === "state" && data.id !== clientId){
+      if(!peers[data.id] && peerCount >= 3) return; // mình + 3 peer = tối đa 4 máy
+      peers[data.id] = {
+        name: data.name || "???",
+        x: data.x || 0,
+        y: data.y || 0,
+        facing: data.facing || 1,
+        skin: data.skin || "red",
+        score: data.score || 0,
+        level: data.level || 0,
+        lastSeen: performance.now()
+      };
+    }else if(data.type === "join" && data.id !== clientId){
+      if(!peers[data.id] && peerCount >= 3) return;
+      peers[data.id] = {
+        name: data.name || "???",
+        x: 0,
+        y: 0,
+        facing: 1,
+        skin: data.skin || "red",
+        score: 0,
+        level: 0,
+        lastSeen: performance.now()
+      };
+    }else if(data.type === "leave"){
+      delete peers[data.id];
+    }
+  };
+
+  ws.onclose = () => {
+    wsConnected = false;
+    ws = null;
+  };
+
+  ws.onerror = () => {
+    wsConnected = false;
+  };
+}
+
+let lastStateSent = 0;
+function sendMyState(){
+  if(!ws || !wsConnected || !roomCode) return;
+  const now = performance.now();
+  if(now - lastStateSent < 80) return; // ~12.5 lần/giây
+  lastStateSent = now;
+
+  const msg = {
+    type: "state",
+    room: roomCode,
+    id: clientId,
+    name: userName,
+    skin: skinName,
+    x: player.x,
+    y: player.y,
+    facing: player.facing,
+    score,
+    level: levelIndex
+  };
+  try{ ws.send(JSON.stringify(msg)); }catch(e){}
+}
+
+function cleanupPeers(){
+  const now = performance.now();
+  for(const id in peers){
+    if(now - peers[id].lastSeen > 8000){
+      delete peers[id];
+    }
+  }
+}
+
+function disconnectWS(){
+  if(ws){
+    try{
+      ws.send(JSON.stringify({ type:"leave", room:roomCode, id:clientId }));
+      ws.close();
+    }catch(e){}
+  }
+  ws = null;
+  wsConnected = false;
+  roomCode = "";
+  peers = {};
+}
+
+// STORAGE HELPERS
 function loadJSON(key, fallback){
   try{
     const raw = localStorage.getItem(key);
@@ -543,7 +714,6 @@ function updateUserStatsOnFinish(score){
 }
 
 // ===== LEADERBOARD =====
-// Dùng USERS_KEY để xếp hạng theo bestScore của từng tài khoản
 function renderRank(ol){
   const users = getUsers();
   const ranked = users
@@ -1560,13 +1730,8 @@ function endGame(won){
   hud.style.display="none";
   listOverlay.style.display="none";
 
-  // Cập nhật thống kê cho tài khoản đang chơi
   updateUserStatsOnFinish(score);
-
-  // Vẫn ghi lịch sử run cũ
   addRank(userName, score);
-
-  // Vẽ lại bảng xếp hạng theo bestScore
   renderRank(leaderList);
   renderRank(leaderList2);
   renderRank(leaderListIngame);
@@ -1948,6 +2113,50 @@ function drawPlayer(){
   }
 }
 
+// NEW: Vẽ các người chơi khác trong phòng (ghost)
+function drawPeers(){
+  for(const id in peers){
+    const p = peers[id];
+    if(p.level !== levelIndex) continue;
+    const skin = SKINS[p.skin] || SKINS.red;
+    const px = Math.round(p.x - cameraX);
+    const py = Math.round(p.y);
+    if(px < -60 || px > W+60) continue;
+
+    ctx.save();
+    ctx.globalAlpha = 0.65;
+
+    ctx.fillStyle="rgba(0,0,0,.20)";
+    ctx.beginPath();
+    ctx.ellipse(px + 14, py + 40, 16, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = skin.pants;
+    ctx.fillRect(px+4, py+28, 6, 10);
+    ctx.fillRect(px+16, py+28, 6, 10);
+
+    ctx.fillStyle = skin.shirt;
+    ctx.fillRect(px, py+4, 28, 16);
+
+    ctx.fillStyle = skin.pants;
+    ctx.fillRect(px, py+20, 28, 10);
+
+    ctx.fillStyle = skin.hat;
+    ctx.fillRect(px-2, py-6, 32, 10);
+
+    ctx.fillStyle = skin.skin;
+    const fx = p.facing===1 ? px+16 : px+2;
+    ctx.fillRect(fx, py+10, 10, 10);
+
+    ctx.restore();
+
+    const label = (p.name || "Player").slice(0, 12);
+    ctx.font = "10px system-ui";
+    ctx.fillStyle = "#e5e7eb";
+    ctx.fillText(label, px-4, py-10);
+  }
+}
+
 // MAIN LOOP
 function update(){
   ctx.clearRect(0,0,W,H);
@@ -1966,6 +2175,11 @@ function update(){
     updateCrocs();
     updateBirds();
     updatePlayer();
+
+    // NEW: gửi trạng thái của mình + dọn peer cũ
+    sendMyState();
+    cleanupPeers();
+
     if(keys.has("KeyR") || touchReset){
       resetLevelToCurrent(true,true);
       showMsg("Reset màn!", 40);
@@ -1997,6 +2211,7 @@ function update(){
   drawWorld();
   if(state==="playing" || state==="paused" || state==="list" || state==="levelclear"){
     drawPlayer();
+    drawPeers(); // NEW
   }
 
   requestAnimationFrame(update);
@@ -2014,6 +2229,7 @@ function showStart(){
   renderRank(leaderList2);
   renderRank(leaderListIngame);
   stopAmbience();
+  disconnectWS(); // NEW
 }
 function openList(){
   if(state!=="playing" && state!=="paused") return;
@@ -2054,6 +2270,7 @@ restartLevelBtn.addEventListener("click", ()=>{
 });
 logoutBtn.addEventListener("click", ()=>{
   clearSession();
+  disconnectWS(); // NEW
   showStart();
 });
 saveSkinBtn.addEventListener("click", ()=>{
@@ -2066,7 +2283,7 @@ saveSkinBtn.addEventListener("click", ()=>{
 backToStartBtn.addEventListener("click", ()=> showStart());
 playAgainBtn.addEventListener("click", ()=> startGameFresh());
 
-// CLEAR RANK: xoá cả lịch sử RANK_KEY + reset thống kê điểm của tất cả user
+// CLEAR RANK
 function clearAllRankAndStats(){
   try{ localStorage.removeItem(RANK_KEY); }catch{}
   const users = getUsers().map(u => ({
@@ -2116,8 +2333,22 @@ function afterAuth(user){
   ensureUserStatsFor(userName);
   const map = getSkinMap();
   skinName = map[userName] || "red";
+
+  // NEW: đọc mã phòng & cập nhật link
+  const roomVal = (roomInput?.value || "").trim();
+  setupRoom(roomVal);
+  updateShareLink();
+
   startGameFresh();
   syncAmbienceToLevel();
+
+  // NEW: nếu có mã phòng => kết nối WS
+  if(roomCode){
+    connectWS();
+    showMsg(`Đã vào phòng ${roomCode} (tối đa 4 người).`, 80);
+  }else{
+    disconnectWS();
+  }
 }
 loginBtn.addEventListener("click", ()=>{
   ensureAudio();
@@ -2184,6 +2415,19 @@ function init(){
   renderRank(leaderList2);
   renderRank(leaderListIngame);
   setupTouchControls();
+
+  // NEW: lắng nghe thay đổi mã phòng để cập nhật link chia sẻ
+  if(roomInput){
+    roomInput.addEventListener("input", updateShareLink);
+  }
+
+  // NEW: nếu URL có ?room=... thì auto điền & update link
+  const urlRoom = getQueryParam("room");
+  if(urlRoom && roomInput){
+    roomInput.value = urlRoom.toUpperCase();
+  }
+  updateShareLink();
+
   const s = getSession();
   if(s && s.user){
     userName = s.user;
